@@ -1,0 +1,16 @@
+{application, bingo_server,
+ [{description, "A TCP server for Bingo game"},
+  {vsn, "0.1.0"},
+  {modules, [bs_app,
+             bs_sup,
+	     	 bs_tcp_sup,
+	     	 bs_tcp,
+	     	 bs_player_sup,
+	     	 bs_player,
+	     	 bs_room,
+         bs_engine]},
+  {registered, [bs_sup]},
+  {applications, [kernel, stdlib]},
+  {mod, {bs_app, []}},
+  {env, []}
+ ]}.
