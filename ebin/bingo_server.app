@@ -8,7 +8,7 @@
 	     	 bs_player_sup,
 	     	 bs_player,
 	     	 bs_room,
-         bs_engine]},
+         bs_data]},
   {registered, [bs_sup]},
   {applications, [kernel, stdlib]},
   {mod, {bs_app, []}},

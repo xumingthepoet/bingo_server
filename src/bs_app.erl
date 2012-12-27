@@ -17,7 +17,7 @@ start(_StartType, _StartArgs) ->
     case bs_sup:start_link(LSock) of
         {ok, Pid} ->
             bs_sup:start_child(),
-            bs_engine:start_engine(),
+            % bs_engine:start_engine(),
             bs_tcp_sup:start_child(),
             {ok, Pid};
         Other ->

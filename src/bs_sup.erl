@@ -25,13 +25,10 @@ init([LSock]) ->
     Room_sup = {bs_room_sup, {bs_room_sup, start_link, []},
                 permanent, 2000, supervisor, [bs_room]},
 
-    Engine = {bs_engine, {bs_engine, start_link, []},
-                permanent, 2000, worker, [bs_engine]},
-
     Room_manager = {bs_room_manager, {bs_room_manager, start_link, []},
                 permanent, 2000, worker, [bs_room_manager]},
 
-    Children = [Tcp_sup, Player_sup, Room_sup, Engine, Room_manager],  
+    Children = [Tcp_sup, Player_sup, Room_sup, Room_manager],  
 
     RestartStrategy = {one_for_one, 4, 3600},
     {ok, {RestartStrategy, Children}}.
