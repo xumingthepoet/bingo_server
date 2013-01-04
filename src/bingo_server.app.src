@@ -1,0 +1,17 @@
+{application, bingo_server,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {modules, [	 bs_app,
+             	 bs_sup,
+	     	 bs_tcp_sup,
+	     	 bs_tcp,
+	     	 bs_player_sup,
+	     	 bs_player,
+	     	 bs_room,
+         	bs_data	]},
+  {registered, [bs_sup]},
+  {applications, [kernel, stdlib]},
+  {mod, { bs_app, []}},
+  {env, []}
+ ]}.
