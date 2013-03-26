@@ -1,0 +1,8 @@
+run_erl [570] Mon Mar 25 14:31:41 2013
+Args before exec of shell:
+run_erl [570] Mon Mar 25 14:31:41 2013
+argv[0] = sh
+run_erl [570] Mon Mar 25 14:31:41 2013
+argv[1] = -c
+run_erl [570] Mon Mar 25 14:31:41 2013
+argv[2] = exec /Users/xuming/erlang-practice/bingo_server/rel/bingo_server/bin/bingo_server console '' 
