@@ -3,4 +3,7 @@ bingo_server
 
 erlang code for bingo game server
 
-begining...
+Finished.
+
+It is my first erlang project. And it is a shit.
+
