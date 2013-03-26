@@ -2,12 +2,14 @@
 
 -behaviour(gen_server).
 
+-include("common.hrl").
+
 -export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {lsock, rsock, player}).
+-record(state, {lsock, rsock, player, is_client_active=true}).
 
 start_link(LSock) ->
     gen_server:start_link(?MODULE, [LSock], []).
@@ -15,73 +17,129 @@ start_link(LSock) ->
 init([LSock]) ->
     {ok, #state{lsock = LSock}, 0}.
 
+handle_call(query_player, _From, State) ->
+    {reply, {ok, State#state.player}, State};
 handle_call(Msg, _From, State) ->
     {reply, {ok, Msg}, State}.
 
-handle_cast({to_client, Content}, State)->
+handle_cast({to_client, Content}, State) ->
     send_data(Content, State),
     {noreply, State};
 handle_cast(stop, State) ->
     {stop, normal, State}.
 
 handle_info({tcp, _Socket, RawData}, State) ->
-    Data = binary_to_list(RawData),
-    NewState = handle_data(Data, State),
+    NewState = handle_data(RawData, State),
     {noreply, NewState};
 handle_info({tcp_closed, _Socket}, State) ->
+    if 
+        State#state.player /= undefine ->
+            gen_server:cast(State#state.player, tcp_closed);
+        true ->
+            ok
+    end,
     {stop, normal, State};
 handle_info(timeout, #state{lsock = LSock} = _State) ->
     {ok, RSock} = gen_tcp:accept(LSock),
-    send_data("connect success\n", #state{rsock = RSock}),
     bs_tcp_sup:start_child(),
-    io:format("rsock: ~p",[RSock]),
-    {noreply, #state{lsock = LSock ,rsock = RSock}}.
+    send_data("{\"api\":\"connected\"}", #state{rsock = RSock}),
+    %io:format("rsock: ~p",[RSock]),
+    {noreply, #state{lsock = LSock ,rsock = RSock}};
+handle_info(Msg, State) ->
+    io:format("tcp unhandled msg: ~p ~n",[Msg]),
+    {noreply, State}.
 
-terminate(Reason, State) ->
-    io:format("TERMINATE:Reason: ~p State: ~p.~n",[Reason,State]),
+terminate(_Reason, State) ->
+    (catch gen_tcp:close(State#state.rsock)),
+    %io:format("TERMINATE:Reason: ~p State: ~p.~n",[Reason,State]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal functions
-send_data(RawData, State) ->
+send_data(Data, State) ->
     try
-        Socket = State#state.rsock,
-        gen_tcp:send(Socket,RawData)
+        Data_n = Data ++ "\n",
+        gen_tcp:send(State#state.rsock, Data_n)
     catch
         Class:Err ->
             io:format("ERROR:~p~p.~n",[Class,Err])
     end,
     State.
 
-handle_data([], State) ->
-    State;
-handle_data(RawData, State) ->
-    try
-        {Command, Content, Rest} = parse(RawData),
-        case Command of 
-            "{login" ->        
-                Player = bs_player:login( Content),
-                send_data("login success\n", State),
-                handle_data(Rest, State#state{player=Player});
-            "{attend" ->
-                bs_player:attend(State#state.player),
-                handle_data(Rest, State);
-            Data ->
-                io:format("RawData:"++Data),
-                State
-            end
+handle_data(<<>>, State) ->
+    State#state{is_client_active = true};
+handle_data(RawData, State) when is_binary(RawData) ->
+    try 
+        <<Length:4/big-signed-integer-unit:8, Rest/binary>> = RawData,
+        <<Msg:Length/binary, Rest2/binary>> = Rest,
+        io:format("Data Received : ~p ~n",[Msg]),
+        Json = jsx:decode(Msg),
+        NewState = handle_json(Json, State),
+        handle_data(Rest2, NewState)
     catch
-        Class:Err ->
-            io:format("ERROR:~p ~p ~p.~n", [Class, Err, RawData]),
+         not_catch ->
+         %Class:Err ->
+            %io:format("ERROR:~p~p.~n",[Class,Err]),
             State
     end.
 
-parse(Data) ->
-    {Command,[_|Contents]} = lists:splitwith(fun(T) -> [T] =/= ":" end , Data),
-    {Content, [_|Rest]} = lists:splitwith(fun(T) -> [T] =/= "}" end , Contents),
-    {Command, Content, Rest}.
+handle_json(Json, State) ->
+    io:format("Json:~p.~n",[Json]),
+    case jsonlist:get(<<"api">>, Json)  of
+        <<"login">> ->        
+            {PlayerInfo, {ok, Player, Response}} = login( jsonlist:get(<<"uid">>, Json) ),
+            Balance = PlayerInfo#userinfo.balance,
+            case Response of
+                room_closed ->
+                    send_data("{\"api\":\"reconnect_failed\"}", State);
+                no_data ->
+                    send_data("{\"api\":\"login_success\",\"balance\":"++binary_to_list(Balance)++"}", State);
+                {timeleft, TimeLeft} ->
+                    send_data("{\"api\":\"relogin_success\",\"timeleft\":"++integer_to_list(TimeLeft)++"}", State);
+                {BL, BLI, Card1, Card2, Board} ->  
+                    send_data("{\"api\":\"reconnect_success\",\"card1\":\""++Card1++
+                                                        "\",\"card2\":\""++Card2++
+                                                        "\",\"board\":\""++Board++
+                                                        "\",\"bingo_left\":"++integer_to_list(BL)++
+                                                        ",\"balance\":"++binary_to_list(Balance)++"}", State);
+                _ ->
+                    send_data("{\"api\":\"login_fail\"}", State)
+            end,
+            State#state{player = Player};
+        <<"attend">> ->
+            Bet = jsonlist:get(<<"bet">>, Json),
+            Card = jsonlist:get(<<"card">>, Json),
+            bs_player:attend(State#state.player,Bet,Card),
+            State;
+        <<"leave_room">> ->
+            bs_player:leave_room(State#state.player),
+            State;
+        <<"bingo">> ->
+            C = jsonlist:get(<<"c">>, Json),
+            L = jsonlist:get(<<"l">>, Json),
+            bs_player:bingo(State#state.player, {C, L}),
+            State;
+        Data ->
+            io:format("RawData:"++Data),
+            State
+    end.
 
+login(UID) ->
+    login:login(UID).
 
+login2(UID ) ->
+    case bs_registration:is_logged_in(UID) of
+        false ->
+            create_a_new_player(UID);
+        {true, Player, _PlayerState} ->
+            bs_registration:login(UID, self(), Player),
+            {Player, new}
+    end.
 
+create_a_new_player(UID) ->
+    {ok,Player} = bs_player_sup:start_child(),
+    bs_registration:login(UID, self(), Player),
+    {ok,_} = gen_server:call(Player, {login, UID}),
+    {Player, new}.

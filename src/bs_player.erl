@@ -2,40 +2,82 @@
 
 -behaviour(gen_server).
 
--export([start_link/0]).
+-include("common.hrl").
+
+-export([start_link/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export ([login/1, attend/1]).
+-export ([leave_room/1,attend/3, bingo/2]).
 
 -define(MAX_BINGO_NUMBER, 75).
--record(state, {tcp, room = room_closed, card1 = [], card2 = [], board = []}).
 
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).  
+-record(state, {info, bet, card, tcp, uid, room = room_closed, card1 = [], card2 = [], board = []}).
 
-init([]) -> 
-    {A1,A2,A3} = now(),
+start_link(INFO) ->
+    UID = INFO#userinfo.uid,
+    gen_server:start_link({global, {?PROCESS, UID}},?MODULE, [INFO], []).  
+
+init([INFO]) -> 
+    UID = INFO#userinfo.uid,
+    <<A1:32,A2:32,A3:32>> = crypto:rand_bytes(12),
     random:seed(A1,A2,A3),   
-    {ok, #state{}}.
+    {ok, #state{info=INFO, uid=UID}, 180000}.
 
+handle_call('GAMES', _From, State) ->
+    {reply, {ok, State#state.room}, State};
+handle_call('RESET_SOCKET', From, State) ->
+    if 
+        State#state.tcp /= undefined ->
+            gen_server:cast(State#state.tcp, stop);
+        true ->
+            do_nothing
+    end,
+    Response =  if
+                    State#state.room /= room_closed ->
+                        case util:is_process_alive(State#state.room) of
+                            true -> 
+                                {ok, {NotBegin, TimeLeft}} = gen_server:call(State#state.room, check_not_begin),
+                                case NotBegin of 
+                                    true ->
+                                        {timeleft, TimeLeft};
+                                    false ->
+                                        {ok, {BingoLeft, BingoLeftInfo}} = gen_server:call(State#state.room, bingo_left_info),
+                                        {
+                                            BingoLeft,
+                                            BingoLeftInfo,
+                                            integerlist_to_list(State#state.card1),
+                                            integerlist_to_list(State#state.card2),
+                                            integerlist_to_list(State#state.board)
+                                        }
+                                end;      
+                            false ->
+                                room_closed
+                        end;
+                    true ->
+                        no_data
+                end,
+    {Pid, _} = From,
+    {reply, {ok, Response}, State#state{tcp = Pid}};
+handle_call('REGISTER_SOCKET', From, State) ->
+    {Pid, _} = From,
+    {reply, ok, State#state{tcp = Pid}};
+handle_call(change_tcp, From, State) ->
+    {Pid, _} = From,
+    {reply, ok, State#state{tcp = Pid}};
+handle_call(query_player_state, _From, State) ->
+    {reply, {ok, State#state.room, State#state.uid}, State};
 handle_call({check_bingo, []}, _From, State) ->
     {reply, {ok, false}, State};
 handle_call({check_bingo, CLpairs}, _From, State) ->
     Check_Result = check_Result(CLpairs, State),
     {reply, {ok, Check_Result}, State};
-handle_call(login, From, _State) ->
+handle_call({login, UID}, From, _State) ->
     Room = bs_room_manager:find_room(),
     gen_server:call(Room, {login, self()}),
     {Pid, _} = From,
-    {reply, {ok, login_success}, #state{tcp = Pid, room = Room}};
-handle_call(attend, _From , State) ->
-    {ok, Time2Begin} = gen_server:call(State#state.room, {attend, self()}),
-    Sign1 = "attend:",
-    Signn = "\n",
-    to_client(State, lists:append([Sign1, integer_to_list(Time2Begin), Signn])),
-    {reply, {ok, attend_success}, State};
+    {reply, {ok, login_success}, #state{tcp = Pid, uid = UID, room = Room }};
 handle_call(state, _From, State) ->
     {reply, {ok, State}, State};
 handle_call(bingo_state, _From, State) -> 
@@ -44,24 +86,144 @@ handle_call(bingo_state, _From, State) ->
 handle_call(Msg, _From, State) ->
     {reply, {ok, Msg}, State}.
 
-handle_cast(room_closed, State) ->
+handle_cast(leave_room, State) ->
+    case State#state.room  of
+        room_closed ->
+            ok;
+        Pid when is_pid(Pid) ->
+            gen_server:call(State#state.room, {leave_room, self()});
+        _ ->
+            ok
+    end,
     {noreply, State#state{room = room_closed}};
+handle_cast({bingo_info_player, Content}, State) ->
+    bingo_info_to_client(State, Content),
+    {noreply, State};
+handle_cast({players_info, Content}, State) ->
+    info_to_client(State, Content),
+    {noreply, State};
+handle_cast({player_info, Content}, State) ->
+    info_to_client_(State, Content),
+    {noreply, State};
+handle_cast({bingo_left, Number}, State) ->
+    to_client(State, "{\"api\":\"bingo_left\",\"content\":"++integer_to_list(Number)++"}\n"),
+    {noreply, State};
+handle_cast({player_number, Number}, State) ->
+    to_client(State, "{\"api\":\"player_number\",\"content\":"++integer_to_list(Number)++"}\n"),
+    {noreply, State};
+handle_cast(dont_die, State) ->
+    {noreply, State};
+handle_cast(tcp_closed, State) ->
+    {noreply, State, 60000};
+handle_cast({bingo, CLpairs}, State) ->
+    { Check_Result, Rank1, Dif1} = 
+    try 
+        if 
+            State#state.room /= room_closed ->
+                R = check_Result(CLpairs, State),
+                if
+                    R == true ->
+                        {ok, RR, Rank} = gen_server:call(State#state.room, {bingo_left, State#state.info}),
+                        if
+                            RR == true ->
+                                Diff = State#state.bet div 10 * (21 - Rank),
+                                if  Diff > 0 ->
+                                        Dif = Diff + State#state.bet;
+                                    true ->
+                                        Dif = State#state.bet
+                                end,
+                                bs_data:add_player_money(State#state.uid,  Dif),
+                                { true, Rank, Dif};
+                            true ->
+                                { false, 0, 0}
+                        end;
+                    true ->
+                        { false, 0, 0}
+                end;
+            true ->
+                { false, 0 ,0 }
+        end
+    catch
+        _:_->
+            { false, 0 , 0}
+    end,
+    Info = State#state.info#userinfo{balance = list_to_binary(integer_to_list(list_to_integer(binary_to_list(State#state.info#userinfo.balance))+ Dif1))},
+    {Type, _} = CLpairs, 
+    to_client(State, "{\"api\":\"bingo\",\"type\":" ++ integer_to_list(Type) ++ ",\"rank\":" ++ integer_to_list(Rank1) ++ ",\"winnings\":" ++ integer_to_list(Dif1) ++ ",\"content\":"++atom_to_list(Check_Result)++"}\n"),
+    {noreply, State#state{info = Info}};
+handle_cast({attend, Bet, Card} , State) ->
+    % R = case util:is_process_alive(State#state.room) of   
+    %         true -> 
+    %             {ok, Time2Begin2} = gen_server:call(State#state.room, {attend, self(), State#state.info}),
+    %             io:format("bs_player_handle_cast_attend:~n"),
+    %             if 
+    %                 Time2Begin2 > 0 ->
+    %                     Time2Begin = Time2Begin2,
+    %                     io:format("bs_player_handle_cast_attend2:~n"),
+    %                     State#state.room;
+    %                 true ->
+    %                     gen_server:call(State#state.room, {leave_room, self()}),
+    %                     Room = bs_room_manager:find_room(),
+    %                     gen_server:call(Room, {login, self()}),
+    %                     {ok, Time2Begin} = gen_server:call(Room, {attend, self(), State#state.info}),
+    %                     io:format("bs_player_handle_cast_attend3:~n"++pid_to_list(State#state.room)),
+    %                     Room
+    %             end;
+    %         _ ->
+    %             Room = bs_room_manager:find_room(),
+    %             gen_server:call(Room, {login, self()}),
+    %             {ok, Time2Begin} = gen_server:call(Room, {attend, self(), State#state.info}),
+    %             io:format("bs_player_handle_cast_attend4:~n"),
+    %             Room
+    %     end,
+    Balance = list_to_integer(binary_to_list(State#state.info#userinfo.balance)),
+    Money_enough  = if 
+                        Bet*Card =< Balance ->
+                            true;
+                        true ->
+                            false
+                    end,
+    case util:is_process_alive(State#state.room) of
+        true ->
+            gen_server:call(State#state.room, {leave_room, self()});
+        _ ->
+            ok
+    end,
+    Room1 = if 
+                Money_enough == true ->
+                    Room = bs_room_manager:find_room(),
+                    gen_server:call(Room, {login, self()}),
+                    {ok, Time2Begin} = gen_server:call(Room, {attend, self(), State#state.info}),
+                    io:format("bs_player_handle_cast_attend~n"),
+                    to_client(State, "{\"api\":\"attend\",\"content\":"++integer_to_list(Time2Begin)++"}\n"),
+                    Room;
+                true ->
+                    room_closed
+            end,
+    {noreply, State#state{room = Room1, bet= Bet , card = Card}};
+handle_cast(room_closed, State) ->
+    %Alive = util:is_process_alive(State#state.tcp),
+    Timeout =  300000,
+    to_client(State, "{\"api\":\"room_closed\"}\n"),
+    {noreply, State#state{room = room_closed},  Timeout};
 handle_cast(leave_this_room, State) ->
-    Room = bs_room_manager:find_room(),
-    gen_server:call(Room, {login, self()}),
-    {noreply, State#state{ room = Room}};
+    gen_server:call(State#state.room, {leave_room, self()}),
+    %Room = bs_room_manager:find_room(),
+    %gen_server:call(Room, {login, self()}),
+    {noreply, State#state{ room = room_closed}};
 handle_cast(game_begin, State) ->
+    Dif = State#state.card*State#state.bet,
+    bs_data:add_player_money(State#state.uid, - Dif),
+    Info = State#state.info#userinfo{balance = list_to_binary(integer_to_list(list_to_integer(binary_to_list(State#state.info#userinfo.balance))- Dif))},
     Card1 = generate_a_new_card(),
     Card2 = generate_a_new_card(),
-    Sign1 = "game_begin:",
-    Sign2 = "and",
-    Signn = "\n",
-    to_client(State, lists:append([Sign1, integerlist_to_list(Card1), Sign2, integerlist_to_list(Card2), Signn])),
-    {noreply, State#state{card1 = Card1, card2 = Card2}};
+    to_client(State, "{\"api\":\"game_begin\",\"card1\":\""++integerlist_to_list(Card1)++
+        "\",\"card2\":\""++integerlist_to_list(Card2)++"\",\"balance\":"++integer_to_list(list_to_integer(binary_to_list(State#state.info#userinfo.balance))- Dif)++"}\n"),
+    {noreply, State#state{info = Info, card1 = Card1, card2 = Card2, board = []}};
 handle_cast({room_wait_state, TimeRest}, State) ->
     Sign1 = "room_wait_state:",
     Signn = "\n",
-    to_client(State, [ Sign1, integer_to_list(TimeRest), Signn]),
+    to_client(State,[ Sign1, integer_to_list(TimeRest), Signn]),
     {noreply, State};
 handle_cast({say, Content}, State) ->
     io:format("say:~p~n",[Content]),
@@ -72,43 +234,59 @@ handle_cast({room_to_player,Content}, State) ->
     to_client(State, {room_to_player, Content}),
     {noreply, State};
 handle_cast({new_bingo_number,Num}, State) ->
-    Sign1 = "new_number:",
-    Signn = "\n",
-    to_client(State, lists:append([Sign1, integer_to_list(Num), Signn])),
+    to_client(State, "{\"api\":\"bingo_number\",\"content\":"++integer_to_list(Num)++"}\n"),
     {noreply, State#state{board = [ Num | State#state.board ] }};
 handle_cast(stop, State) ->
     {stop, normal, State};
 handle_cast(_, State) ->
     {noreply, State}.
 
-handle_info(_, State) ->
+handle_info(timeout, State) ->
+    {stop, normal, State};
+handle_info(Msg, State) ->
+    io:format("player unhandled msg: ~p ~n",[Msg]),
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    gen_server:cast(State#state.tcp, stop),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%non-behaviourial APIs
-login(UID) ->
-    case bs_data:is_alive(UID) of
-        true ->
-            bs_data:get_alive_player_pid(UID);
-        _ ->
-            {ok,Player} = bs_player_sup:start_child(),
-            {ok,_} = gen_server:call(Player, login),
-            Player
-    end.
 
-attend(Pid) ->
-    gen_server:call(Pid, attend).
+leave_room(Pid) ->
+    gen_server:cast(Pid, leave_room).
 
+attend(Pid, Bet, Card) ->
+    gen_server:cast(Pid, {attend, Bet, Card}).
+
+bingo(Pid, CLpairs) ->
+    gen_server:cast(Pid, {bingo, CLpairs}).
+
+bingo_info_to_client(State, #userinfo{uid=_U, balance=_B, exp=_E, name=N, avatar=A, facebookid=F} = _Info) ->
+     to_client(State, "{\"api\":\"bingo_info_player\",\"name\":\""++binary_to_list(N)++
+                                              "\",\"avatar\":\""++binary_to_list(A)++
+                                              "\",\"facebookid\":\""++binary_to_list(F)++ 
+                                              "\"}\n").
+
+info_to_client(_State, []) ->
+    ok;
+info_to_client(State, [I|R]) ->
+    info_to_client_(State, I),
+    info_to_client(State, R).
+
+info_to_client_(State, #userinfo{uid=_U, balance=_B, exp=_E, name=N, avatar=A, facebookid=F} = _Info) ->
+    to_client(State, "{\"api\":\"player_info\",\"name\":\""++binary_to_list(N)++
+                                              "\",\"avatar\":\""++binary_to_list(A)++
+                                              "\",\"facebookid\":\""++binary_to_list(F)++ 
+                                              "\"}\n").
 %%internal functions
 
 to_client(State, Msg) ->
     if is_pid(State#state.tcp) ->
-        case erlang:is_process_alive(State#state.tcp) of 
+        case util:is_process_alive(State#state.tcp) of 
             true ->
                 gen_server:cast(State#state.tcp, {to_client, Msg});
             _ -> 
@@ -120,7 +298,7 @@ to_client(State, Msg) ->
 
 to_room(State ,Msg) ->
     if is_pid(State#state.room) ->
-        case erlang:is_process_alive(State#state.room) of 
+        case util:is_process_alive(State#state.room) of 
             true ->
                 gen_server:cast(State#state.room, {to_room, Msg});
              _ -> 

@@ -26,15 +26,21 @@ init([]) ->
 handle_call(find, _From, State) ->
 	Current_room = State#state.current_room,
 	if is_pid(Current_room) ->
-			Alive = erlang:is_process_alive(Current_room);
+			Alive = util:is_process_alive(Current_room);
 		true ->
 			Alive = false
 	end,
-	if Alive ->
-			{ok, Isbegin} = gen_server:call(Current_room,check);
+	if 	Alive ->
+			{ok, Isbegin} = 
+				try gen_server:call(Current_room,check)
+				catch
+					_ ->
+						{ok, true}
+				end;
 		true ->	
 			Isbegin = true
 	end,
+    io:format("bs_player_handle_cast_attend: ~p.~n" , [Isbegin]),
 	case Isbegin of
 		false ->
 			{reply, {ok, State#state.current_room}, State};

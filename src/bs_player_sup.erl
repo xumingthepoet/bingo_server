@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 -export([start_link/0,
-         start_child/0
+         start_child/1
         ]).
 
 -export([init/1]).
@@ -13,8 +13,8 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child() ->
-    supervisor:start_child(?SERVER, []).
+start_child(UID) ->
+    supervisor:start_child(?SERVER, [UID]).
 
 init([]) ->
     Player = {bs_player, {bs_player, start_link, []},
