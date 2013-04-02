@@ -9,7 +9,7 @@
 
 -export([find_room/0]).
 
--record(state, {current_room}).
+-record(state, {current_room, shut = false}).
 
 find_room() ->
 	{ok, Pid} = gen_server:call(?MODULE,find),
@@ -41,16 +41,22 @@ handle_call(find, _From, State) ->
 			Isbegin = true
 	end,
     io:format("bs_player_handle_cast_attend: ~p.~n" , [Isbegin]),
-	case Isbegin of
-		false ->
+	case {Isbegin, State#state.shut} of
+		{_, true} ->
+			{reply, {ok, undefined}, State};
+		{false, false} ->
 			{reply, {ok, State#state.current_room}, State};
-		_ ->
+		{_, false} ->
 			{ok, NewRoom} = bs_room_sup:start_child(),
 			{reply, {ok, NewRoom}, #state{current_room = NewRoom}}
 	end;
 handle_call(Msg, _From, State) ->
     {reply, {ok, Msg}, State}.
 
+handle_cast(change_on, State) ->
+    {noreply, State#state{shut=false} };
+handle_cast(change_off, State) ->
+    {noreply, State#state{shut=true} };
 handle_cast(stop, State) ->
     {stop, normal, State}.
 

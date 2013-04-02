@@ -15,7 +15,7 @@
 -define(MAX_WAIT_TIME, 30).
 -define(MAX_PLAY_TIME, 350).
 -define(TIMER_INTERVAL, 1).
--record(state, {bingoplayersinfo=[], playersinfo=[], players=[], beholders=[], isbegin=false, timeline, bingo_number=[], timer, bingo_left = 0, bingo_rank = 0}).
+-record(state, {bingoplayersinfo=[], playersinfo=[], players=[], beholders=[], isbegin=false, timeline, bingo_number=[], timer, bingo_left = 0, bingo_rank = 0, bingo_max=0}).
 
 start_link() ->
     gen_server:start_link(?MODULE, [], []).
@@ -61,7 +61,7 @@ handle_call({bingo_left, Info}, _From, State) ->
                         true ->
                             State#state.bingo_rank
                     end,
-    {reply, {ok, Result, Bingo_rank}, State#state{bingo_left = Bingo_left, bingo_rank = Bingo_rank, bingoplayersinfo = Bingoplayersinfo}};
+    {reply, {ok, Result, Bingo_rank, State#state.bingo_max}, State#state{bingo_left = Bingo_left, bingo_rank = Bingo_rank, bingoplayersinfo = Bingoplayersinfo}};
 handle_call(check, _From, State) ->
     R = 
         if 
@@ -208,7 +208,8 @@ change_bingo_wait_state(State) ->
 start_bingo_game(State) ->
     broadcast(State#state.players, game_begin),
     broadcast(State#state.beholders, leave_this_room),
-    Bingo_left1 = 2 * lists:flatlength(State#state.players) div ?BINGO_LEFT_RATE,
+    Bingo_max = lists:flatlength(State#state.players),
+    Bingo_left1 = 2 * Bingo_max div ?BINGO_LEFT_RATE,
     Bingo_left =
     if 
         Bingo_left1 == 0 ->
@@ -217,7 +218,7 @@ start_bingo_game(State) ->
             Bingo_left1
     end,
     broadcast(State#state.players, {bingo_left, Bingo_left}),
-    State#state{timeline = 0, isbegin = true, bingo_left = Bingo_left}.
+    State#state{timeline = 0, isbegin = true, bingo_left = Bingo_left, bingo_max = Bingo_max}.
 
 broadcast(Receivers, Msg) ->
     lists:foreach(fun(E) -> gen_server:cast(E, Msg) end, Receivers).

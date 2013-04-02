@@ -33,9 +33,17 @@ stop(_State) ->
 
 initDynamoDB() ->
     inets:start(),
-    ssl:start(),
-    application:start(ibrowse),
-    ddb_iam:credentials("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN"),
-    {'ok', Key, Secret, Token} = ddb_iam:token(129600),
-    ddb:credentials(Key, Secret, Token),
+    application:start(crypto),
+    application:start(public_key),
+    application:start(ssl),
+    application:start(lhttpc),
+    dinerl:setup("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN", "us-east-1a"),
     ok.
+% initDynamoDB() ->
+%     inets:start(),
+%     ssl:start(),
+%     application:start(ibrowse),
+%     ddb_iam:credentials("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN"),
+%     {'ok', Key, Secret, Token} = ddb_iam:token(129600),
+%     ddb:credentials(Key, Secret, Token),
+%     ok.

@@ -71,19 +71,20 @@ send_data(Data, State) ->
 handle_data(<<>>, State) ->
     State#state{is_client_active = true};
 handle_data(RawData, State) when is_binary(RawData) ->
-    try 
+    % try 
         <<Length:4/big-signed-integer-unit:8, Rest/binary>> = RawData,
         <<Msg:Length/binary, Rest2/binary>> = Rest,
         io:format("Data Received : ~p ~n",[Msg]),
-        Json = jsx:decode(Msg),
+        {Json} = jiffy:decode(Msg),
         NewState = handle_json(Json, State),
-        handle_data(Rest2, NewState)
-    catch
-         not_catch ->
-         %Class:Err ->
-            %io:format("ERROR:~p~p.~n",[Class,Err]),
-            State
-    end.
+        handle_data(Rest2, NewState).
+    % catch
+    %     Class:Err ->
+    %         io:format("ERROR:~p~p.~n",[Class,Err]);
+    %     Err ->
+    %         io:format("ERROR:~p.~n",[Err]),
+    %         State
+    % end.
 
 handle_json(Json, State) ->
     io:format("Json:~p.~n",[Json]),

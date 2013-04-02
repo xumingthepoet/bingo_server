@@ -35,9 +35,9 @@ login(Info, Process, player_online) ->
     login(Info, Process, client_down);
 login(Info, Process, player_busy) ->
     login(Info, Process, client_down);
-login(_Info, Process, client_down) ->
+login(Info, Process, client_down) ->
     %% tell player process to talk to the new socket
-    {ok, Response} = gen_server:call(Process, 'RESET_SOCKET'),
+    {ok, Response} = gen_server:call(Process, {'RESET_SOCKET', Info}),
     {ok, Process, Response};    
 login(Info, _Process, player_offline) ->
     %% start player process
