@@ -142,6 +142,8 @@ handle_cast({bingo, CLpairs}, State) ->
                                         Dif = State#state.bet
                                 end,
                                 bs_data:add_player_money(State#state.uid,  Dif),
+                                bs_log:info("bingo ~p",[Dif]),
+                                analysis:bingo(Dif),
                                 { true, Rank, Dif};
                             true ->
                                 { false, 0, 0}
@@ -169,25 +171,25 @@ handle_cast({attend, Bet, Card} , State) ->
     % R = case util:is_process_alive(State#state.room) of   
     %         true -> 
     %             {ok, Time2Begin2} = gen_server:call(State#state.room, {attend, self(), State#state.info}),
-    %             io:format("bs_player_handle_cast_attend:~n"),
+    %             bs_log:info("bs_player_handle_cast_attend:~n"),
     %             if 
     %                 Time2Begin2 > 0 ->
     %                     Time2Begin = Time2Begin2,
-    %                     io:format("bs_player_handle_cast_attend2:~n"),
+    %                     bs_log:info("bs_player_handle_cast_attend2:~n"),
     %                     State#state.room;
     %                 true ->
     %                     gen_server:call(State#state.room, {leave_room, self()}),
     %                     Room = bs_room_manager:find_room(),
     %                     gen_server:call(Room, {login, self()}),
     %                     {ok, Time2Begin} = gen_server:call(Room, {attend, self(), State#state.info}),
-    %                     io:format("bs_player_handle_cast_attend3:~n"++pid_to_list(State#state.room)),
+    %                     bs_log:info("bs_player_handle_cast_attend3:~n"++pid_to_list(State#state.room)),
     %                     Room
     %             end;
     %         _ ->
     %             Room = bs_room_manager:find_room(),
     %             gen_server:call(Room, {login, self()}),
     %             {ok, Time2Begin} = gen_server:call(Room, {attend, self(), State#state.info}),
-    %             io:format("bs_player_handle_cast_attend4:~n"),
+    %             bs_log:info("bs_player_handle_cast_attend4:~n"),
     %             Room
     %     end,
 
@@ -211,7 +213,8 @@ handle_cast({attend, Bet, Card} , State) ->
                     Room = bs_room_manager:find_room(),
                     gen_server:call(Room, {login, self()}),
                     {ok, Time2Begin} = gen_server:call(Room, {attend, self(), Info}),
-                    io:format("bs_player_handle_cast_attend~n"),
+                    %%bs_log:info("bs_player_handle_cast_attend~n"),
+                    %%lager:log(info, self(), ),
                     to_client(State, "{\"api\":\"attend\",\"content\":"++integer_to_list(Time2Begin)++"}\n"),
                     Room;
                 true ->
@@ -231,6 +234,8 @@ handle_cast(leave_this_room, State) ->
 handle_cast(game_begin, State) ->
     Dif = State#state.card*State#state.bet,
     bs_data:add_player_money(State#state.uid, - Dif),
+    bs_log:info("game_begin ~p",[Dif]),
+    analysis:begin_game(Dif),
     Info = State#state.info#userinfo{balance = list_to_binary(integer_to_list(list_to_integer(binary_to_list(State#state.info#userinfo.balance))- Dif))},
     Card1 = generate_a_new_card(),
     Card2 = generate_a_new_card(),
@@ -243,11 +248,11 @@ handle_cast({room_wait_state, TimeRest}, State) ->
     to_client(State,[ Sign1, integer_to_list(TimeRest), Signn]),
     {noreply, State};
 handle_cast({say, Content}, State) ->
-    io:format("say:~p~n",[Content]),
+    bs_log:info("say:~p~n",[Content]),
     to_room(State, {say,Content}),
     {noreply, State};
 handle_cast({room_to_player,Content}, State) ->
-    io:format("reply:~p~n",[Content]),
+    bs_log:info("reply:~p~n",[Content]),
     to_client(State, {room_to_player, Content}),
     {noreply, State};
 handle_cast({new_bingo_number,Num}, State) ->
@@ -261,7 +266,8 @@ handle_cast(_, State) ->
 handle_info(timeout, State) ->
     {stop, normal, State};
 handle_info(Msg, State) ->
-    io:format("player unhandled msg: ~p ~n",[Msg]),
+    %%bs_log:info("player unhandled msg: ~p ~n",[Msg]),
+    bs_log:info(Msg),
     {noreply, State}.
 
 terminate(_Reason, State) ->
@@ -415,32 +421,32 @@ contains([H|R], List2) ->
     end.
 
 check_all_bingo_result(State) ->
-    io:format("~n~p ",[check_Result({1, 1}, State)]),
-    io:format("~p ",[check_Result({1, 2}, State)]),
-    io:format("~p ",[check_Result({1, 3}, State)]),
-    io:format("~p ",[check_Result({1, 4}, State)]),
-    io:format("~p ",[check_Result({1, 5}, State)]),
-    io:format("~p ",[check_Result({1, 6}, State)]),
-    io:format("~p ",[check_Result({1, 7}, State)]),
-    io:format("~p ",[check_Result({1, 8}, State)]),
-    io:format("~p ",[check_Result({1, 9}, State)]),
-    io:format("~p ",[check_Result({1, 10}, State)]),
-    io:format("~p ",[check_Result({1, 11}, State)]),
-    io:format("~p ",[check_Result({1, 12}, State)]),
-    io:format("~p~n",[check_Result({1, 13}, State)]),
-    io:format("~p ",[check_Result({2, 1}, State)]),
-    io:format("~p ",[check_Result({2, 2}, State)]),
-    io:format("~p ",[check_Result({2, 3}, State)]),
-    io:format("~p ",[check_Result({2, 4}, State)]),
-    io:format("~p ",[check_Result({2, 5}, State)]),
-    io:format("~p ",[check_Result({2, 6}, State)]),
-    io:format("~p ",[check_Result({2, 7}, State)]),
-    io:format("~p ",[check_Result({2, 8}, State)]),
-    io:format("~p ",[check_Result({2, 9}, State)]),
-    io:format("~p ",[check_Result({2, 10}, State)]),
-    io:format("~p ",[check_Result({2, 11}, State)]),
-    io:format("~p ",[check_Result({2, 12}, State)]),
-    io:format("~p~n",[check_Result({2, 13}, State)]),
+    bs_log:info("~n~p ",[check_Result({1, 1}, State)]),
+    bs_log:info("~p ",[check_Result({1, 2}, State)]),
+    bs_log:info("~p ",[check_Result({1, 3}, State)]),
+    bs_log:info("~p ",[check_Result({1, 4}, State)]),
+    bs_log:info("~p ",[check_Result({1, 5}, State)]),
+    bs_log:info("~p ",[check_Result({1, 6}, State)]),
+    bs_log:info("~p ",[check_Result({1, 7}, State)]),
+    bs_log:info("~p ",[check_Result({1, 8}, State)]),
+    bs_log:info("~p ",[check_Result({1, 9}, State)]),
+    bs_log:info("~p ",[check_Result({1, 10}, State)]),
+    bs_log:info("~p ",[check_Result({1, 11}, State)]),
+    bs_log:info("~p ",[check_Result({1, 12}, State)]),
+    bs_log:info("~p~n",[check_Result({1, 13}, State)]),
+    bs_log:info("~p ",[check_Result({2, 1}, State)]),
+    bs_log:info("~p ",[check_Result({2, 2}, State)]),
+    bs_log:info("~p ",[check_Result({2, 3}, State)]),
+    bs_log:info("~p ",[check_Result({2, 4}, State)]),
+    bs_log:info("~p ",[check_Result({2, 5}, State)]),
+    bs_log:info("~p ",[check_Result({2, 6}, State)]),
+    bs_log:info("~p ",[check_Result({2, 7}, State)]),
+    bs_log:info("~p ",[check_Result({2, 8}, State)]),
+    bs_log:info("~p ",[check_Result({2, 9}, State)]),
+    bs_log:info("~p ",[check_Result({2, 10}, State)]),
+    bs_log:info("~p ",[check_Result({2, 11}, State)]),
+    bs_log:info("~p ",[check_Result({2, 12}, State)]),
+    bs_log:info("~p~n",[check_Result({2, 13}, State)]),
     ok.
 
 integerlist_to_list(Input) -> integerlist_to_list(Input, []).

@@ -149,7 +149,7 @@ handle_cast(stop, State) ->
     {stop, normal, State}.
 
 handle_info(Msg, State) ->
-    io:format("room unhandled msg: ~p ~n",[Msg]),
+    bs_log:info("room unhandled msg: ~p ~n",[Msg]),
     {noreply, State}.
 
 terminate(_Reason, State) ->

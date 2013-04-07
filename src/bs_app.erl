@@ -9,9 +9,11 @@
 -define(TCP_OPTIONS, [binary, {active, true}, {packet, 0}, {reuseaddr, true}]).
 
 start(_StartType, _StartArgs) ->
-    io:format("bs_app start ... ~n"),
+    io:format("bingo_server starting ... ~n"),
+    ok = initLogging(),
+    io:format("Logging initialized already. ~n"),
     ok = initDynamoDB(),
-    io:format("initDynamoDB initialized already. ~n"),
+    io:format("DynamoDB initialized already. ~n"),
     Port = case application:get_env(tcp_interface, port) of
                {ok, P} -> P;
                undefined -> ?DEFAULT_PORT
@@ -31,12 +33,16 @@ start(_StartType, _StartArgs) ->
 stop(_State) ->
     ok.
 
+initLogging() ->
+    bs_log:init(),
+    ok.
+
 initDynamoDB() ->
     inets:start(),
-    application:start(crypto),
-    application:start(public_key),
-    application:start(ssl),
-    application:start(lhttpc),
+    %application:start(crypto),
+    %application:start(public_key),
+    %application:start(ssl),
+    %application:start(lhttpc),
     dinerl:setup("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN", "us-east-1a"),
     ok.
 % initDynamoDB() ->

@@ -1,0 +1,27 @@
+{"2",
+
+ [{"1", [
+		{add_module, bs_log},
+		{add_module, analysis, [bs_log]},
+		{update, bs_sup, supervisor},
+		{apply, {supervisor, restart_child, [bs_sup, analysis]}},
+		{load_module, bs_player, [bs_log,analysis]},
+		{load_module, bs_tcp, [bs_log]},
+		{load_module, bs_room, [bs_log]},
+		{load_module, bs_room_manager, [bs_log]}
+	]
+ }],
+
+ [{"1", [
+		{load_module, bs_player, []},
+        	{load_module, bs_tcp, []},
+        	{load_module, bs_room, []},
+        	{load_module, bs_room_manager, []},
+		{apply, {supervisor, terminate_child, [bs_sup, analysis]}},
+		{apply, {supervisor, delete_child, [bs_sup, analysis]}},
+		{update, bs_sup, supervisor},
+		{delete_module, analysis},
+		{delete_module, bs_log}
+	]
+ }]
+}.

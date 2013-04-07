@@ -43,15 +43,16 @@ handle_info(timeout, #state{lsock = LSock} = _State) ->
     {ok, RSock} = gen_tcp:accept(LSock),
     bs_tcp_sup:start_child(),
     send_data("{\"api\":\"connected\"}", #state{rsock = RSock}),
-    %io:format("rsock: ~p",[RSock]),
+    %bs_log:info("rsock: ~p",[RSock]),
     {noreply, #state{lsock = LSock ,rsock = RSock}};
 handle_info(Msg, State) ->
-    io:format("tcp unhandled msg: ~p ~n",[Msg]),
+    %%bs_log:info("tcp unhandled msg: ~p ~n",[Msg]),
+    bs_log:info( "tcp unhandled msg: ~p ~n",[Msg]),
     {noreply, State}.
 
 terminate(_Reason, State) ->
     (catch gen_tcp:close(State#state.rsock)),
-    %io:format("TERMINATE:Reason: ~p State: ~p.~n",[Reason,State]),
+    %bs_log:info("TERMINATE:Reason: ~p State: ~p.~n",[Reason,State]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -64,7 +65,7 @@ send_data(Data, State) ->
         gen_tcp:send(State#state.rsock, Data_n)
     catch
         Class:Err ->
-            io:format("ERROR:~p~p.~n",[Class,Err])
+            bs_log:info("ERROR:~p~p.~n",[Class,Err])
     end,
     State.
 
@@ -74,20 +75,20 @@ handle_data(RawData, State) when is_binary(RawData) ->
     % try 
         <<Length:4/big-signed-integer-unit:8, Rest/binary>> = RawData,
         <<Msg:Length/binary, Rest2/binary>> = Rest,
-        io:format("Data Received : ~p ~n",[Msg]),
+        bs_log:info("Data Received : ~p ~n",[Msg]),
         {Json} = jiffy:decode(Msg),
         NewState = handle_json(Json, State),
         handle_data(Rest2, NewState).
     % catch
     %     Class:Err ->
-    %         io:format("ERROR:~p~p.~n",[Class,Err]);
+    %         bs_log:info("ERROR:~p~p.~n",[Class,Err]);
     %     Err ->
-    %         io:format("ERROR:~p.~n",[Err]),
+    %         bs_log:info("ERROR:~p.~n",[Err]),
     %         State
     % end.
 
 handle_json(Json, State) ->
-    io:format("Json:~p.~n",[Json]),
+    bs_log:info("Json:~p.~n",[Json]),
     case jsonlist:get(<<"api">>, Json)  of
         <<"login">> ->        
             {PlayerInfo, {ok, Player, Response}} = login( jsonlist:get(<<"uid">>, Json) ),
@@ -123,7 +124,7 @@ handle_json(Json, State) ->
             bs_player:bingo(State#state.player, {C, L}),
             State;
         Data ->
-            io:format("RawData:"++Data),
+            bs_log:info("RawData:"++Data),
             State
     end.
 

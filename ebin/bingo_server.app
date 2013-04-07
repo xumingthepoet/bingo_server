@@ -1,0 +1,11 @@
+{application,bingo_server,
+             [{description,[]},
+              {vsn,"2"},
+              {modules,[analysis,bs_app,bs_data,bs_engine,bs_log,bs_player,
+                        bs_player_sup,bs_registration,bs_room,bs_room_manager,
+                        bs_room_sup,bs_sup,bs_tcp,bs_tcp_sup,jsonlist,login,
+                        util]},
+              {registered,[bs_sup]},
+              {applications,[kernel,stdlib]},
+              {mod,{bs_app,[]}},
+              {env,[]}]}.

@@ -28,7 +28,10 @@ init([LSock]) ->
     Room_manager = {bs_room_manager, {bs_room_manager, start_link, []},
                 permanent, 2000, worker, [bs_room_manager]},
 
-    Children = [Tcp_sup, Player_sup, Room_sup, Room_manager],  
+    Analysis = {analysis, {analysis, start_link, []},
+                permanent, 2000, worker, [analysis]},
+
+    Children = [Tcp_sup, Player_sup, Room_sup, Room_manager, Analysis],  
 
     RestartStrategy = {one_for_one, 4, 3600},
     {ok, {RestartStrategy, Children}}.

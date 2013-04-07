@@ -21,12 +21,7 @@ kick_local_player() ->
 				end
 				)
 			end,
-	F = fun (P) ->
-			case P of
-				{p, P1} -> Hanlde({p, P1});
-				_ -> ok
-			end
-		end,
+	F = fun (P) -> case P of {p, P1} -> Hanlde({p, P1}); _ -> ok end end,
 	lists:foreach(F,global:registered_names()).
 
 

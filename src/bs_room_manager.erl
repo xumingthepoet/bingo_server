@@ -40,7 +40,8 @@ handle_call(find, _From, State) ->
 		true ->	
 			Isbegin = true
 	end,
-    io:format("bs_player_handle_cast_attend: ~p.~n" , [Isbegin]),
+    %%io:format("bs_player_handle_cast_attend: ~p.~n" , [Isbegin]),
+    bs_log:info("bs_player_handle_cast_attend: ~p.~n" , [Isbegin]),
 	case {Isbegin, State#state.shut} of
 		{_, true} ->
 			{reply, {ok, undefined}, State};
@@ -48,6 +49,7 @@ handle_call(find, _From, State) ->
 			{reply, {ok, State#state.current_room}, State};
 		{_, false} ->
 			{ok, NewRoom} = bs_room_sup:start_child(),
+			bs_log:info("New Room Created!"),
 			{reply, {ok, NewRoom}, #state{current_room = NewRoom}}
 	end;
 handle_call(Msg, _From, State) ->
