@@ -43,7 +43,7 @@ initDynamoDB() ->
     %application:start(public_key),
     %application:start(ssl),
     %application:start(lhttpc),
-    dinerl:setup("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN", "us-east-1a"),
+    dinerl:setup("", "", ""),
     ok.
 % initDynamoDB() ->
 %     inets:start(),
