@@ -49,7 +49,7 @@ initDynamoDB() ->
 %     inets:start(),
 %     ssl:start(),
 %     application:start(ibrowse),
-%     ddb_iam:credentials("AKIAISPHG46EFLNNHUJQ", "Hd2h3ZUxP/MP51WElYWeDsLmcfayKOFdaXEpANgN"),
+%     ddb_iam:credentials("", "/"),
 %     {'ok', Key, Secret, Token} = ddb_iam:token(129600),
 %     ddb:credentials(Key, Secret, Token),
 %     ok.
